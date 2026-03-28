@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manga Site</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">MangaSite</div>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#browse">Browse</a></li>
+            </ul>
+            <div class="search-container">
+                <input type="text" placeholder="Search...">
+                <button>Search</button>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section id="home">
+            <section id="popular">
+                <h2>Popular Manga</h2>
+                <div class="manga-grid"></div>
+            </section>
+            <section id="new-releases">
+                <h2>New Releases</h2>
+                <div class="manga-grid"></div>
+            </section>
+            <section id="recently-updated">
+                <h2>Recently Updated</h2>
+                <div class="manga-grid"></div>
+            </section>
+        </section>
+
+        <section id="browse" class="hidden">
+            <h2>Browse All Manga</h2>
+            <div class="manga-grid"></div>
+        </section>
+
+        <section id="manga-details" class="hidden">
+            <!-- Manga details will be dynamically injected here -->
+        </section>
+
+        <section id="chapter-reader" class="hidden">
+            <!-- Chapter reader will be dynamically injected here -->
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 MangaSite. All rights reserved.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
