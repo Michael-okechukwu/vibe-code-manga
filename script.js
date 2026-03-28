@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Ensure modals are hidden on page load
+    document.getElementById('login-modal').classList.add('hidden');
+    document.getElementById('signup-modal').classList.add('hidden');
+
     const views = {
         home: document.getElementById('home'),
         browse: document.getElementById('browse'),
@@ -144,5 +148,42 @@ document.addEventListener('DOMContentLoaded', () => {
     renderMangaGrid(dummyMangaData.recentlyUpdated, '#recently-updated .manga-grid');
     renderMangaGrid(allManga, '#browse .manga-grid');
     showView('home');
+
+    // --- Modal Logic ---
+    const loginModal = document.getElementById('login-modal');
+    const signupModal = document.getElementById('signup-modal');
+    const loginBtn = document.getElementById('login-btn');
+    const signupBtn = document.getElementById('signup-btn');
+    const closeBtns = document.querySelectorAll('.close-btn');
+
+    loginBtn.addEventListener('click', () => loginModal.classList.remove('hidden'));
+    signupBtn.addEventListener('click', () => signupModal.classList.remove('hidden'));
+
+    closeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            loginModal.classList.add('hidden');
+            signupModal.classList.add('hidden');
+        });
+    });
+
+    window.addEventListener('click', (e) => {
+        if (e.target === loginModal || e.target === signupModal) {
+            loginModal.classList.add('hidden');
+            signupModal.classList.add('hidden');
+        }
+    });
+
+    document.getElementById('login-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        console.log('Login form submitted. Ready for backend integration.');
+        loginModal.classList.add('hidden');
+    });
+
+    document.getElementById('signup-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        console.log('Sign up form submitted. Ready for backend integration.');
+        signupModal.classList.add('hidden');
+    });
 });
+
 
