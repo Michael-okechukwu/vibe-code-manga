@@ -371,6 +371,29 @@ section h2::after {
     transform: translateY(-2px);
 }
 
+.reader-controls {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+}
+
+.reader-controls select {
+    background: rgba(0,0,0,0.5);
+    color: var(--text-primary);
+    border: var(--border-glass);
+    padding: 0.6rem;
+    border-radius: 8px;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+.reader-controls select option {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
 /* Vertical Webtoon Style Fixes */
 #manga-image-container img {
     border-radius: 4px;
@@ -548,8 +571,8 @@ footer {
 /* Small UI Mobile (iPhone SE, old Androids) */
 @media (max-width: 480px) {
     .manga-grid {
-        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 0.8rem;
     }
     
     nav .logo {
