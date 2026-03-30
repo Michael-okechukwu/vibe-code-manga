@@ -1,5 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
 
+    const header = document.querySelector('header');
+    const hamburger = document.querySelector('.hamburger');
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 50) {
+            header.classList.add('header-scrolled');
+        } else {
+            header.classList.remove('header-scrolled');
+            if (window.innerWidth > 768) {
+                header.classList.remove('menu-open');
+            }
+        }
+    });
+
+    hamburger.addEventListener('click', () => {
+        header.classList.toggle('menu-open');
+    });
+
     const views = {
         home: document.getElementById('home'),
         browse: document.getElementById('browse'),
@@ -92,7 +110,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function processMangaData(mangaArray) {
         return mangaArray.map(manga => {
-            const title = manga.attributes.title.en || Object.values(manga.attributes.title)[0] || 'Unknown Title';
+            let title = manga.attributes.title.en;
+            
+            // If main title doesn't have English, check altTitles
+            if (!title && manga.attributes.altTitles && Array.isArray(manga.attributes.altTitles)) {
+                const enAlt = manga.attributes.altTitles.find(alt => alt.en);
+                if (enAlt) {
+                    title = enAlt.en;
+                }
+            }
+            
+            // Fallback to the first available title if English isn't found anywhere
+            if (!title) {
+                title = Object.values(manga.attributes.title)[0] || 'Unknown Title';
+            }
+
             const rawDesc = manga.attributes.description.en || 'No description available.';
             
             // Basic XSS Protection: Strip pure HTML tags by dumping to a temporary text node
@@ -295,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const titleText = currentMangaData ? `${currentMangaData.title} - ${chapterName}` : chapterName;
         
         const imagesHtml = currentChapterPages.map((pageUrl, index) => 
-            `<img src="${pageUrl}" alt="Page ${index + 1}" loading="lazy" style="display: block; margin: 0 auto; max-width: 100%; margin-bottom: 20px; box-shadow: 0 0 20px rgba(0,0,0,0.8);">`
+            `<img src="${pageUrl}" alt="Page ${index + 1}" loading="lazy">`
         ).join('');
 
         // Next/Prev Math (Remember: Chapter list is fetched DESC order, meaning index 0 is the NEWEST chapter)
@@ -323,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <button onclick="window.location.hash='${nextLink}'" ${!hasNext ? 'disabled' : ''}>Next</button>
                     </div>
                 </div>
-                <div class="manga-page" id="manga-image-container" style="display: flex; flex-direction: column; align-items: center; background-color: #000; padding: 20px 0; width: 100%; margin-top: 0;">
+                <div class="manga-page" id="manga-image-container">
                     ${imagesHtml}
                 </div>
             </div>
@@ -399,15 +431,27 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('hashchange', handleHashChange);
 
     // --- Global Event Listeners ---
-    document.querySelector('a[href="#home"]').addEventListener('click', () => { window.location.hash = '#home'; });
-    document.querySelector('a[href="#browse"]').addEventListener('click', () => { window.location.hash = '#browse'; });
+    document.querySelector('a[href="#home"]').addEventListener('click', () => { 
+        window.location.hash = '#home'; 
+        header.classList.remove('menu-open');
+    });
+    document.querySelector('a[href="#browse"]').addEventListener('click', () => { 
+        window.location.hash = '#browse'; 
+        header.classList.remove('menu-open');
+    });
 
     const searchInput = document.querySelector('.search-container input');
     const searchBtn = document.querySelector('.search-container button');
 
-    searchBtn.addEventListener('click', () => searchManga(searchInput.value));
+    searchBtn.addEventListener('click', () => {
+        searchManga(searchInput.value);
+        header.classList.remove('menu-open');
+    });
     searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') searchManga(searchInput.value);
+        if (e.key === 'Enter') {
+            searchManga(searchInput.value);
+            header.classList.remove('menu-open');
+        }
     });
 
     // Boot
