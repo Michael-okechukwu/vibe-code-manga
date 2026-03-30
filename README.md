@@ -32,6 +32,17 @@ When you load the homepage here, we need to ask MangaDex for the "Popular", "New
 ### 4. Async / Await
 Because downloading images over the internet takes time, we use `async` and `await` markers on our JavaScript functions. This lets the browser draw the dark background and the navigation bar instantly, and then it simply *waits* in the background for the manga data to arrive. If we didn't use async code, the entire webpage would freeze completely white until every single image finished downloading.
 
+### 5. Single Page Application Routing (The Back Button Fix)
+Normally, when you click a link, your browser throws away the current webpage and downloads a totally new one. Our app is a "Single Page Application," meaning we never leave `index.html`. We just hide and show different `<div>` blocks. 
+To make sure your browser's physical "Back" button still works (instead of accidentally closing the website), we update the website's URL with a hashtag (like `#manga/123`). The script listens for the URL to change and instantly loads the correct screen.
+
+### 6. Memory Caching (Loading Things Instantly)
+Because we use a Rate Limiter, downloading data is naturally a little slow. To fix this, we created a digital scratchpad (a `Map()` cache) in the JavaScript. Every time we download a list of manga, we save a copy to the computer's RAM. If you hit the "Back" button to look at that exact list again, our script instantly grabs the saved copy from RAM instead of waking up the network connection again. It makes the site feel lightning fast.
+
+### 7. Handling Massive Data (Pagination & Duplicates)
+MangaDex only lets us download 500 chapters at a time. For epic stories like *One Piece*, it has over a thousand chapters! To grab them all, our code runs a `while` loop that keeps asking for the "next 500 chapters" until it runs out. 
+Sometimes, multiple fans translate the exact same chapter, which would cause the dropdown menu to show "Chapter 344" three times in a row. Our code runs a smart check scanning for exact matches and automatically renames the duplicates by adding decimals (like `344.1, 344.2`) so they stay perfectly organized.
+
 ## Customizing
 
 - **Styles:** Everything is controlled in the `style.css` file. The colors are managed by variables at the very top (look for `:root`), so you can easily change the glowing cyan color to red or green by changing one line!

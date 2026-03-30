@@ -111,23 +111,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchChapters(mangaId) {
-        const url = new URL(`${MD_BASE_URL}/manga/${mangaId}/feed`);
-        url.searchParams.append('translatedLanguage[]', 'en');
-        url.searchParams.append('order[chapter]', 'desc');
-        url.searchParams.append('limit', '100');
+        let allChapters = [];
+        const limit = 500;
+        let offset = 0;
+        let total = 0;
 
-        try {
-            const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url.toString());
-            const data = await fetchWithRateLimit(proxyUrl);
-            return data.data.map(ch => ({
-                id: ch.id,
-                chapter: ch.attributes.chapter || '0',
-                title: ch.attributes.title || ''
-            }));
-        } catch (error) {
-            console.error('Failed to fetch chapters:', error);
-            return [];
+        do {
+            const url = new URL(`${MD_BASE_URL}/manga/${mangaId}/feed`);
+            url.searchParams.append('translatedLanguage[]', 'en');
+            url.searchParams.append('order[chapter]', 'desc');
+            url.searchParams.append('limit', limit.toString());
+            url.searchParams.append('offset', offset.toString());
+
+            try {
+                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url.toString());
+                const data = await fetchWithRateLimit(proxyUrl);
+                
+                if (data && data.data) {
+                    total = data.total || 0;
+                    allChapters = allChapters.concat(data.data);
+                } else {
+                    break;
+                }
+            } catch (error) {
+                console.error('Failed to fetch chapters:', error);
+                break;
+            }
+            offset += limit;
+        } while (offset < total);
+
+        const processed = allChapters.map(ch => ({
+            id: ch.id,
+            chapter: ch.attributes.chapter || '0',
+            title: ch.attributes.title || ''
+        }));
+
+        // Handle duplicates by counting occurrences and appending '.1', '.2'
+        const groups = {};
+        for (const ch of processed) {
+            if (!groups[ch.chapter]) groups[ch.chapter] = [];
+            groups[ch.chapter].push(ch);
         }
+        
+        for (const key in groups) {
+            const arr = groups[key];
+            if (arr.length > 1) {
+                for (let i = 0; i < arr.length; i++) {
+                    arr[i].chapter = `${key}.${i + 1}`;
+                }
+            }
+        }
+
+        return processed;
     }
 
     async function fetchChapterPagesInfo(chapterId) {
