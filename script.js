@@ -3,14 +3,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const header = document.querySelector('header');
     const hamburger = document.querySelector('.hamburger');
 
+    let lastScrollY = window.scrollY;
+    let ticking = false;
+
     window.addEventListener('scroll', () => {
-        if (window.scrollY > 50) {
-            header.classList.add('header-scrolled');
-        } else {
-            header.classList.remove('header-scrolled');
-            if (window.innerWidth > 768) {
-                header.classList.remove('menu-open');
-            }
+        if (!ticking) {
+            requestAnimationFrame(() => {
+                const currentScrollY = window.scrollY;
+                const diff = currentScrollY - lastScrollY;
+
+                // Add glass effect once user scrolls past the header
+                if (currentScrollY > 10) {
+                    header.classList.add('header-scrolled');
+                } else {
+                    header.classList.remove('header-scrolled');
+                }
+
+                // Hide when scrolling DOWN (more than 5px to avoid jitter)
+                if (diff > 5 && currentScrollY > 80) {
+                    header.classList.add('header-hidden');
+                    header.classList.remove('menu-open'); // close menu when hiding
+                }
+                // Show when scrolling UP
+                else if (diff < -5) {
+                    header.classList.remove('header-hidden');
+                }
+
+                lastScrollY = currentScrollY;
+                ticking = false;
+            });
+            ticking = true;
         }
     });
 
@@ -30,14 +52,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const MD_UPLOADS_URL = 'https://uploads.mangadex.org';
 
     // --- Performance: Caching & Rate Limiting ---
-    const rateLimitDelay = 250; 
+    const rateLimitDelay = 300; 
     let lastFetchTime = 0;
     let fetchQueue = Promise.resolve();
     const apiCache = new Map(); // Memory cache for lightning-fast back navigation
 
-    async function fetchWithRateLimit(url, options = {}) {
+    // CORS Proxy fallback list
+    const PROXY_LIST = [
+        (url) => 'https://corsproxy.io/?' + encodeURIComponent(url),
+        (url) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+        (url) => 'https://thingproxy.freeboard.io/fetch/' + url,
+    ];
+    let activeProxyIndex = 0;
+
+    function getProxiedUrl(url) {
+        return PROXY_LIST[activeProxyIndex](url);
+    }
+
+    async function fetchWithRateLimit(url, options = {}, skipCache = false) {
         const cacheKey = url + JSON.stringify(options);
-        if (apiCache.has(cacheKey)) {
+        if (!skipCache && apiCache.has(cacheKey)) {
             return apiCache.get(cacheKey); // Instantly return from RAM
         }
 
@@ -51,16 +85,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 lastFetchTime = Date.now();
-                
-                try {
-                    const response = await fetch(url, options);
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    const data = await response.json();
-                    
-                    apiCache.set(cacheKey, data); // Store in cache
-                    resolve(data);
-                } catch (error) {
-                    reject(error);
+
+                // Try each proxy in order until one works
+                for (let i = 0; i < PROXY_LIST.length; i++) {
+                    const proxyIndex = (activeProxyIndex + i) % PROXY_LIST.length;
+                    const proxiedUrl = PROXY_LIST[proxyIndex](url);
+                    try {
+                        const response = await fetch(proxiedUrl, options);
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        const data = await response.json();
+                        // Switch to the working proxy for future requests
+                        activeProxyIndex = proxyIndex;
+                        if (!skipCache) apiCache.set(cacheKey, data);
+                        resolve(data);
+                        return;
+                    } catch (err) {
+                        console.warn(`Proxy ${proxyIndex} failed for ${url}:`, err.message);
+                        if (i === PROXY_LIST.length - 1) {
+                            reject(new Error(`All proxies failed for: ${url}`));
+                        }
+                        // Small delay before trying next proxy
+                        await new Promise(r => setTimeout(r, 500));
+                    }
                 }
             });
         });
@@ -83,8 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url.toString());
-            const data = await fetchWithRateLimit(proxyUrl);
+            const data = await fetchWithRateLimit(url.toString());
             return processMangaData(data.data);
         } catch (error) {
             console.error('Failed to fetch manga:', error);
@@ -98,8 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = new URL(`${MD_BASE_URL}/manga/${id}`);
         url.searchParams.append('includes[]', 'cover_art');
         try {
-            const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url.toString());
-            const data = await fetchWithRateLimit(proxyUrl);
+            const data = await fetchWithRateLimit(url.toString());
             const processed = processMangaData([data.data]);
             return processed[0];
         } catch (error) {
@@ -156,8 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
             url.searchParams.append('offset', offset.toString());
 
             try {
-                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url.toString());
-                const data = await fetchWithRateLimit(proxyUrl);
+                const data = await fetchWithRateLimit(url.toString());
                 
                 if (data && data.data) {
                     total = data.total || 0;
@@ -200,12 +243,28 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchChapterPagesInfo(chapterId) {
         try {
             const target = `${MD_BASE_URL}/at-home/server/${chapterId}`;
-            const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(target);
-            const data = await fetchWithRateLimit(proxyUrl);
+            // Always skip cache for at-home server — tokens expire after ~15 min
+            const data = await fetchWithRateLimit(target, {}, true);
             
+            if (!data || !data.chapter) {
+                throw new Error('Invalid at-home server response');
+            }
+
             const host = data.baseUrl;
             const hash = data.chapter.hash;
-            return data.chapter.data.map(page => `${host}/data/${hash}/${page}`);
+
+            // Prefer high-quality pages; fallback to dataSaver if unavailable
+            const pages = (data.chapter.data && data.chapter.data.length > 0)
+                ? data.chapter.data.map(page => `${host}/data/${hash}/${page}`)
+                : (data.chapter.dataSaver && data.chapter.dataSaver.length > 0)
+                    ? data.chapter.dataSaver.map(page => `${host}/data-saver/${hash}/${page}`)
+                    : [];
+
+            if (pages.length === 0) {
+                throw new Error('Chapter has no pages');
+            }
+
+            return pages;
         } catch (error) {
             console.error('Failed to fetch chapter pages:', error);
             return [];
@@ -316,7 +375,23 @@ document.addEventListener('DOMContentLoaded', () => {
         currentChapterPages = await fetchChapterPagesInfo(chapterId);
 
         if (currentChapterPages.length === 0) {
-            views.chapterReader.querySelector('.manga-page').innerHTML = '<p>Error loading pages.</p>';
+            views.chapterReader.innerHTML = `
+                <div class="chapter-reader-layout">
+                    <div class="reader-nav" style="position: sticky; top: 0; z-index: 100;">
+                        <button onclick="window.location.hash='#manga/${mangaId}'" id="back-to-details">Back</button>
+                        <h2>Failed to Load Chapter</h2>
+                    </div>
+                    <div class="manga-page" style="text-align:center; padding: 4rem 1rem;">
+                        <p style="font-size:1.2rem; color:#ff6b6b;">⚠️ Could not load chapter pages.</p>
+                        <p style="color:#aaa; margin-top:0.5rem;">This chapter may be unavailable, removed, or restricted by MangaDex.</p>
+                        <button onclick="window.location.hash='#manga/${mangaId}'" style="margin-top:1.5rem; padding:0.7rem 2rem; background: var(--accent); color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:1rem;">← Back to Manga</button>
+                        <button onclick="loadChapterReaderView('${mangaId}','${chapterId}')" style="margin-top:1.5rem; margin-left:1rem; padding:0.7rem 2rem; background:#333; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:1rem;">🔄 Retry</button>
+                    </div>
+                </div>
+            `;
+            // Make retry button work
+            views.chapterReader.querySelector('button[onclick*="loadChapterReaderView"]')
+                ?.addEventListener('click', (e) => { e.preventDefault(); loadChapterReaderView(mangaId, chapterId); });
             return;
         }
 
@@ -326,9 +401,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderReaderControls(mangaId, currentChapterId, chapterName, chapterIndex) {
         const titleText = currentMangaData ? `${currentMangaData.title} - ${chapterName}` : chapterName;
         
+        const totalPages = currentChapterPages.length;
         const imagesHtml = currentChapterPages.map((pageUrl, index) => 
-            `<img src="${pageUrl}" alt="Page ${index + 1}" loading="lazy">`
+            `<div class="page-wrapper" id="page-${index + 1}">
+                <img 
+                    src="${pageUrl}" 
+                    alt="Page ${index + 1}"
+                    loading="${index < 3 ? 'eager' : 'lazy'}"
+                    onerror="this.parentElement.innerHTML='<div class=\'page-error\'><span>⚠ Page ${index + 1} failed to load</span><br><button onclick=\'this.closest(\'.page-wrapper\').querySelector(\'img\') && (this.closest(\'.page-wrapper\').innerHTML=\'<img src=\\&quot;${pageUrl.replace(/"/g, '&quot;')}&quot; loading=eager alt=\'Page ${index + 1}\' class=\'retry-img\'>\')\'> Retry</button></div>'">
+            </div>`
         ).join('');
+
+        // Track load progress
+        let loadedCount = 0;
+        const progressHtml = `<div id="page-load-progress" style="position:fixed;bottom:1.5rem;right:1.5rem;background:rgba(0,0,0,0.8);color:#fff;padding:0.5rem 1rem;border-radius:8px;font-size:0.85rem;z-index:999;backdrop-filter:blur(4px);">Loading 0/${totalPages} pages...</div>`;
 
         // Next/Prev Math (Remember: Chapter list is fetched DESC order, meaning index 0 is the NEWEST chapter)
         const hasNext = chapterIndex > 0;
@@ -359,11 +445,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${imagesHtml}
                 </div>
             </div>
+            ${progressHtml}
         `;
 
         document.getElementById('chapter-select').addEventListener('change', (e) => {
             window.location.hash = e.target.value;
         });
+
+        // Page load progress tracking
+        const progressEl = document.getElementById('page-load-progress');
+        const allImgs = document.querySelectorAll('#manga-image-container img');
+        if (progressEl && allImgs.length > 0) {
+            const updateProgress = () => {
+                loadedCount++;
+                if (progressEl) progressEl.textContent = `Loaded ${loadedCount}/${totalPages} pages`;
+                if (loadedCount >= totalPages) {
+                    setTimeout(() => progressEl?.remove(), 1500);
+                }
+            };
+            allImgs.forEach(img => {
+                if (img.complete) { updateProgress(); }
+                else {
+                    img.addEventListener('load', updateProgress, { once: true });
+                    img.addEventListener('error', updateProgress, { once: true });
+                }
+            });
+        }
     }
 
     // --- Loading Homepage/Browse Data ---
